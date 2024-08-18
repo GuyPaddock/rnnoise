@@ -26,13 +26,29 @@
 */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include "rnnoise.h"
 
 #define FRAME_SIZE 480
+#define PROGRESS_BAR_WIDTH 50
+
+void print_progress_bar(float progress) {
+  int bar_width = PROGRESS_BAR_WIDTH;
+  int pos = (int)(bar_width * progress);
+  printf("[");
+  for (int i=0;i<bar_width;++i) {
+    if (i < pos) printf("=");
+    else if (i == pos) printf(">");
+    else printf(" ");
+  }
+  printf("] %d%%\r", (int)(progress * 100));
+  fflush(stdout);
+}
 
 int main(int argc, char **argv) {
   int i;
   int first = 1;
+  long file_size, total_frames, current_frame = 0;
   float x[FRAME_SIZE];
   FILE *f1, *fout;
   DenoiseState *st;
@@ -47,8 +63,15 @@ int main(int argc, char **argv) {
     fprintf(stderr, "usage: %s <noisy speech> <output denoised>\n", argv[0]);
     return 1;
   }
+
+  // Open the input file and determine the total number of frames.
   f1 = fopen(argv[1], "rb");
   fout = fopen(argv[2], "wb");
+  fseek(f1, 0, SEEK_END);
+  file_size = ftell(f1);
+  fseek(f1, 0, SEEK_SET);
+  total_frames = file_size / (FRAME_SIZE * sizeof(short));
+
   while (1) {
     short tmp[FRAME_SIZE];
     fread(tmp, sizeof(short), FRAME_SIZE, f1);
@@ -58,12 +81,20 @@ int main(int argc, char **argv) {
     for (i=0;i<FRAME_SIZE;i++) tmp[i] = x[i];
     if (!first) fwrite(tmp, sizeof(short), FRAME_SIZE, fout);
     first = 0;
+
+    // Update progress bar.
+    ++current_frame;
+    print_progress_bar((float)current_frame / total_frames);
   }
+
   rnnoise_destroy(st);
   fclose(f1);
   fclose(fout);
 #ifdef USE_WEIGHTS_FILE
   rnnoise_model_free(model);
 #endif
+
+  // Move to the next line after the progress bar.
+  printf("\n");
   return 0;
 }
